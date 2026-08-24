@@ -1,0 +1,18 @@
+# Python
+backend/.venv/
+__pycache__/
+*.py[cod]
+
+# Laufzeitdaten: Datenbank und HTTP-Cache werden vom Sync erzeugt
+backend/data/
+
+# Heruntergeladene Matchcenter-Seiten gehoeren dem AFV und kommen
+# nicht ins oeffentliche Repo. Die index.json bleibt als Bauplan drin.
+backend/seiten/*.html
+
+# Node / Expo
+node_modules/
+.expo/
+dist/
+*.log
+.DS_Store
