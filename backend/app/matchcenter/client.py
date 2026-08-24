@@ -17,6 +17,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import shutil
+import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,6 +48,87 @@ class Response:
     from_cache: bool
 
 
+# ---------------------------------------------------------------------------
+# Transport
+# ---------------------------------------------------------------------------
+#
+# Warum zwei Transporte?
+#
+# matchcenter.afv.ch liegt hinter Cloudflare. Deren Bot-Erkennung schaut nicht
+# nur auf den User-Agent, sondern auch auf den TLS-Fingerprint des Clients.
+# Jede Python-Bibliothek (httpx, requests, urllib) bekommt dadurch 403, curl
+# nicht - und zwar unabhaengig von Tempo und User-Agent. Getestet am 24.08.2026.
+#
+# Dieses Projekt versucht ausdruecklich NICHT, sich als Browser auszugeben:
+# der User-Agent nennt Projekt und Kontaktadresse, es wird keine JS-Challenge
+# geloest und keine TLS-Impersonation verwendet. Es wird schlicht curl als
+# HTTP-Client benutzt. robots.txt des Matchcenters erlaubt "User-agent: * /".
+#
+# Wenn der AFV signalisiert, dass ihm das nicht recht ist, gehoert hier ein
+# Schalter auf "aus" - nicht ein Trick mehr rein.
+
+
+class Transport:
+    """Gemeinsame Schnittstelle: URL rein, (Statuscode, Bytes) raus."""
+
+    name = "abstract"
+
+    def fetch(self, url: str) -> tuple[int, bytes]:
+        raise NotImplementedError
+
+    def close(self) -> None:
+        pass
+
+
+class HttpxTransport(Transport):
+    name = "httpx"
+
+    def __init__(self, headers: dict) -> None:
+        self._client = httpx.Client(
+            timeout=config.REQUEST_TIMEOUT, follow_redirects=True, headers=headers
+        )
+
+    def fetch(self, url: str) -> tuple[int, bytes]:
+        resp = self._client.get(url)
+        return resp.status_code, resp.content
+
+    def close(self) -> None:
+        self._client.close()
+
+
+class CurlTransport(Transport):
+    name = "curl"
+
+    def __init__(self, headers: dict) -> None:
+        self._headers = headers
+
+    def fetch(self, url: str) -> tuple[int, bytes]:
+        cmd = ["curl", "--silent", "--show-error", "--location",
+               "--max-time", str(int(config.REQUEST_TIMEOUT)),
+               "--write-out", "\n%{http_code}"]
+        for key, value in self._headers.items():
+            cmd += ["-H", f"{key}: {value}"]
+        cmd.append(url)
+
+        proc = subprocess.run(cmd, capture_output=True, timeout=config.REQUEST_TIMEOUT + 10)
+        if proc.returncode != 0:
+            raise RuntimeError(f"curl Exit {proc.returncode}: {proc.stderr.decode(errors='replace')[:200]}")
+        body, _, status = proc.stdout.rpartition(b"\n")
+        return int(status.strip() or 0), body
+
+
+def build_transport(headers: dict, backend: str = "auto") -> Transport:
+    if backend == "httpx":
+        return HttpxTransport(headers)
+    if backend == "curl":
+        return CurlTransport(headers)
+    # auto: curl bevorzugen, weil httpx am Fingerprint scheitert.
+    if shutil.which("curl"):
+        return CurlTransport(headers)
+    log.warning("curl nicht gefunden - fallback auf httpx (das Matchcenter blockt das vermutlich)")
+    return HttpxTransport(headers)
+
+
 class MatchcenterClient:
     def __init__(
         self,
@@ -53,20 +136,20 @@ class MatchcenterClient:
         cache_dir: Path | None = None,
         delay: float | None = None,
         offline: bool = False,
+        backend: str | None = None,
     ) -> None:
         self.cache_dir = cache_dir or config.CACHE_DIR
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.delay = config.REQUEST_DELAY if delay is None else delay
         self.offline = offline
         self._last_request = 0.0
-        self._client = httpx.Client(
-            timeout=config.REQUEST_TIMEOUT,
-            follow_redirects=True,
-            headers={
+        self._transport = build_transport(
+            {
                 "User-Agent": config.USER_AGENT,
                 "Accept": "text/html,application/xhtml+xml",
                 "Accept-Language": "de-CH,de;q=0.9",
             },
+            backend or config.HTTP_BACKEND,
         )
 
     # -- oeffentliche API ---------------------------------------------------
@@ -127,7 +210,7 @@ class MatchcenterClient:
         return self.get({"s": config.SEASON}, ttl=ttl)
 
     def close(self) -> None:
-        self._client.close()
+        self._transport.close()
 
     def __enter__(self) -> "MatchcenterClient":
         return self
@@ -145,16 +228,17 @@ class MatchcenterClient:
         last_error: Exception | None = None
         for attempt in range(4):
             try:
-                resp = self._client.get(url)
+                status, body = self._transport.fetch(url)
                 self._last_request = time.monotonic()
-                if resp.status_code in (403, 429):
-                    # Das Matchcenter drosselt ueber Cloudflare. Kein Grund zur
+                if status in (403, 429):
+                    # Cloudflare drosselt oder blockt den Client. Kein Grund zur
                     # Panik - nur ein Signal, deutlich langsamer zu machen.
-                    raise _Throttled(resp.status_code)
-                resp.raise_for_status()
-                # Der Server schickt utf-8, deklariert es aber nicht immer
-                # konsistent - httpx' Autodetection liegt hier gelegentlich daneben.
-                return resp.content.decode("utf-8", errors="replace")
+                    raise _Throttled(status)
+                if status >= 400:
+                    raise RuntimeError(f"HTTP {status}")
+                # Der Server schickt utf-8, deklariert es aber nicht ueberall
+                # konsistent - deshalb fest dekodieren statt raten lassen.
+                return body.decode("utf-8", errors="replace")
             except Exception as exc:  # noqa: BLE001 - bewusst breit, wir loggen
                 last_error = exc
                 self._last_request = time.monotonic()

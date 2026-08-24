@@ -26,9 +26,13 @@ CLUB_NAME = os.getenv("AFV_CLUB_NAME", "FC Othmarsingen")
 CLUB_MATCH_NAME = os.getenv("AFV_CLUB_MATCH_NAME", "Othmarsingen")
 
 # --- HTTP ------------------------------------------------------------------
+# Der User-Agent nennt bewusst Projekt und Zweck, damit man beim AFV sieht,
+# wer da anfragt. Die Kontaktadresse kommt aus der Umgebung, damit sie nicht
+# im oeffentlichen Repository steht - setze AFV_CONTACT in deiner .env.
+CONTACT = os.getenv("AFV_CONTACT", "")
 USER_AGENT = os.getenv(
     "AFV_USER_AGENT",
-    "FCOthmarsingenApp/1.0 (Portfolio-Projekt; Kontakt: vince.buehler7@gmail.com)",
+    f"FCOthmarsingenApp/1.0 (inoffizielle Vereins-App, Portfolio-Projekt{'; Kontakt: ' + CONTACT if CONTACT else ''})",
 )
 # Mindestabstand zwischen zwei Requests in Sekunden. Bewusst defensiv:
 # das Matchcenter ist ein kleiner Verbandsserver, kein CDN.
@@ -46,3 +50,8 @@ CACHE_TTL_FINISHED = int(os.getenv("AFV_CACHE_TTL_FINISHED", "604800"))  # 7 Tag
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+# --- HTTP-Transport --------------------------------------------------------
+# "auto" (Standard) nimmt curl, wenn vorhanden - siehe Kommentar in
+# matchcenter/client.py, warum das noetig ist. "httpx" oder "curl" erzwingen.
+HTTP_BACKEND = os.getenv("AFV_HTTP_BACKEND", "auto")

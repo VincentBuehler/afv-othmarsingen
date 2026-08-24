@@ -14,7 +14,9 @@ sie sieht nur diese Datenbank.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+import re
 import sqlite3
 from datetime import datetime, timezone
 
@@ -32,6 +34,32 @@ def _now() -> str:
 def _is_club_match(match: P.MatchRow) -> bool:
     needle = config.CLUB_MATCH_NAME.lower()
     return needle in match.home.lower() or needle in match.away.lower()
+
+
+def _club_pairing_names(match: P.MatchRow) -> list[str]:
+    needle = config.CLUB_MATCH_NAME.lower()
+    return [n for n in (match.home, match.away) if needle in n.lower()]
+
+
+# Ein Suffix unterscheidet zwei Teams desselben Vereins in derselben Gruppe:
+# Team "Junioren D-7 a" spielt als "FC Othmarsingen a".
+_SUFFIX_RE = re.compile(r"\b([a-z]|\d{1,2}[a-z]?)\s*$", re.I)
+
+
+def _suffix(name: str) -> str:
+    """Letztes kurzes Kuerzel eines Namens, sonst leerer String."""
+    m = _SUFFIX_RE.search(name.strip())
+    return m.group(1).lower() if m else ""
+
+
+def _pairing_suffix(pairing: str) -> str:
+    """Was hinter dem Vereinsnamen steht: "FC Othmarsingen b" -> "b"."""
+    lowered = pairing.lower()
+    idx = lowered.find(config.CLUB_MATCH_NAME.lower())
+    rest = pairing[idx + len(config.CLUB_MATCH_NAME):] if idx >= 0 else ""
+    # Klammerzusaetze wie "(Sen.30+/R)" sind kein Mannschaftskuerzel.
+    rest = re.sub(r"\(.*?\)", "", rest).strip()
+    return rest.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +117,26 @@ def _save_standings(conn: sqlite3.Connection, group_id: int, rows: list[P.Standi
     )
 
 
+def _save_tournaments(conn: sqlite3.Connection, team_id: int, rows: list[P.Tournament]) -> int:
+    conn.executemany(
+        """
+        INSERT INTO tournaments (tournament_id, team_id, date, time, title, category,
+                                 series, organiser, venue, teams)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(tournament_id, team_id) DO UPDATE SET
+            date = excluded.date, time = excluded.time, title = excluded.title,
+            category = excluded.category, series = excluded.series,
+            organiser = excluded.organiser, venue = excluded.venue, teams = excluded.teams
+        """,
+        [
+            (t.tournament_id, team_id, t.date, t.time, t.title, t.category,
+             t.series, t.organiser, t.venue, json.dumps(t.teams, ensure_ascii=False))
+            for t in rows
+        ],
+    )
+    return len(rows)
+
+
 def _save_scorers(conn: sqlite3.Connection, group_id: int, rows: list[P.ScorerRow]) -> None:
     conn.execute("DELETE FROM scorers WHERE group_id = ?", (group_id,))
     conn.executemany(
@@ -139,9 +187,19 @@ def sync_team(conn: sqlite3.Connection, client: MatchcenterClient, team: dict) -
     )
 
     if not ref.complete:
-        # Juniorenturniere ohne Rangliste haben keine Gruppen-Ids.
-        log.info("  %-28s keine Gruppe (Turnierform) - nur Teamseite", name)
-        _save_matches(conn, P.parse_matches(html), None)
+        # Kinderfussball (Junioren E/F/G) laeuft ohne Gruppe und ohne Rangliste.
+        # Was auf der Teamseite steht, gehoert eindeutig diesem Team.
+        page_matches = P.parse_matches(html)
+        _save_matches(conn, page_matches, None)
+        conn.executemany(
+            "INSERT INTO team_matches (team_id, match_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+            [(team["team_id"], m.match_id) for m in page_matches
+             if m.match_id and _is_club_match(m)],
+        )
+        tournaments = _save_tournaments(conn, team["team_id"], P.parse_tournaments(html))
+        log.info(
+            "  %-28s Turnierform: %d Spiele, %d Turniere", name, len(page_matches), tournaments
+        )
         conn.commit()
         return
 
@@ -153,14 +211,11 @@ def sync_team(conn: sqlite3.Connection, client: MatchcenterClient, team: dict) -
     schedule = P.parse_matches(client.schedule(ref.season_id, group_id).html)
     saved = _save_matches(conn, schedule, group_id)
 
-    # 2c) Zuordnung Team -> Spiele des Vereins in dieser Gruppe.
+    # Die Zuordnung Team -> Spiel passiert erst am Ende in map_team_matches():
+    # dafuer muessen alle Teams ihre Gruppe kennen.
     club_matches = [m for m in schedule if _is_club_match(m) and m.match_id]
-    conn.executemany(
-        "INSERT INTO team_matches (team_id, match_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
-        [(team["team_id"], m.match_id) for m in club_matches],
-    )
 
-    # 2d) Torschuetzenliste (gibt es nicht in jeder Kategorie).
+    # 2c) Torschuetzenliste (gibt es nicht in jeder Kategorie).
     scorers = P.parse_scorers(client.scorers(ref.season_id, group_id).html)
     if scorers:
         _save_scorers(conn, group_id, scorers)
@@ -169,6 +224,62 @@ def sync_team(conn: sqlite3.Connection, client: MatchcenterClient, team: dict) -
         "  %-28s %-24s %2d Tabelle | %3d Spiele (%2d eigene) | %3d Torschuetzen",
         name, league_name[:24], len(standings), saved, len(club_matches), len(scorers),
     )
+    conn.commit()
+
+
+def map_team_matches(conn: sqlite3.Connection) -> None:
+    """Ordnet jedem Vereinsteam seine Spiele zu.
+
+    Der Normalfall ist einfach: ist der Verein mit nur einer Mannschaft in
+    einer Gruppe, gehoeren ihm dort alle Vereinsspiele.
+
+    Der Sonderfall sind zwei Mannschaften desselben Vereins in derselben
+    Gruppe - bei den Junioren D-7 sind das "a" und "b". In den Paarungen
+    stehen sie als "FC Othmarsingen a" bzw. "... b"; genau dieses Kuerzel
+    steht auch am Ende des Teamnamens ("Junioren D-7 a"). Darueber laesst
+    sich beides sauber verbinden. Ohne diesen Schritt haetten beide Teams
+    identische - und damit falsche - Statistiken.
+    """
+    groups = db.rows(
+        conn,
+        "SELECT group_id, COUNT(*) AS n FROM teams WHERE group_id IS NOT NULL GROUP BY group_id",
+    )
+
+    for g in groups:
+        group_id = g["group_id"]
+        teams = db.rows(
+            conn, "SELECT team_id, name FROM teams WHERE group_id = ?", (group_id,)
+        )
+        matches = db.rows(
+            conn,
+            "SELECT match_id, home, away FROM matches WHERE group_id = ? "
+            "AND (LOWER(home) LIKE '%'||?||'%' OR LOWER(away) LIKE '%'||?||'%')",
+            (group_id, config.CLUB_MATCH_NAME.lower(), config.CLUB_MATCH_NAME.lower()),
+        )
+        if not matches:
+            continue
+
+        if len(teams) == 1:
+            pairs = [(teams[0]["team_id"], m["match_id"]) for m in matches]
+        else:
+            pairs = []
+            for team in teams:
+                want = _suffix(team["name"])
+                for m in matches:
+                    row = P.MatchRow(None, None, None, m["home"], m["away"], None, None)
+                    if any(_pairing_suffix(n) == want for n in _club_pairing_names(row)):
+                        pairs.append((team["team_id"], m["match_id"]))
+            matched = {p[1] for p in pairs}
+            if len(matched) < len(matches):
+                log.warning(
+                    "  Gruppe %s: %d von %d Spielen keiner Mannschaft zugeordnet",
+                    group_id, len(matches) - len(matched), len(matches),
+                )
+
+        conn.executemany(
+            "INSERT INTO team_matches (team_id, match_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+            pairs,
+        )
     conn.commit()
 
 
@@ -181,7 +292,7 @@ def sync_match_details(conn: sqlite3.Connection, client: MatchcenterClient, limi
     todo = db.rows(
         conn,
         """
-        SELECT m.match_id FROM matches m
+        SELECT DISTINCT m.match_id FROM matches m
         JOIN team_matches tm ON tm.match_id = m.match_id
         WHERE m.home_goals IS NOT NULL
           AND (m.detail_synced_at IS NULL OR m.detail_synced_at = '')
@@ -241,7 +352,8 @@ def sync_match_details(conn: sqlite3.Connection, client: MatchcenterClient, limi
 def run(*, details: int = 0, reset: bool = False, offline: bool = False) -> None:
     with db.session() as conn:
         if reset:
-            for table in ("team_matches", "match_events", "matches", "standings", "scorers", "teams"):
+            for table in ("team_matches", "match_events", "matches", "standings",
+                          "scorers", "tournaments", "teams"):
                 conn.execute(f"DELETE FROM {table}")
             log.info("Datenbank geleert")
 
@@ -258,6 +370,8 @@ def run(*, details: int = 0, reset: bool = False, offline: bool = False) -> None
                     log.warning("  %-28s uebersprungen: %s", team["name"], exc)
             if failed:
                 log.warning("%d von %d Teams uebersprungen", failed, len(teams))
+
+            map_team_matches(conn)
             if details:
                 try:
                     sync_match_details(conn, client, details)
@@ -270,7 +384,8 @@ def run(*, details: int = 0, reset: bool = False, offline: bool = False) -> None
 
         counts = {
             t: conn.execute(f"SELECT COUNT(*) c FROM {t}").fetchone()["c"]
-            for t in ("teams", "matches", "team_matches", "standings", "scorers", "match_events")
+            for t in ("teams", "matches", "team_matches", "standings", "scorers",
+                      "match_events", "tournaments")
         }
         log.info("Fertig: %s", ", ".join(f"{k}={v}" for k, v in counts.items()))
 

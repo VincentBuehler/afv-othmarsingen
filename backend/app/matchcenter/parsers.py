@@ -131,8 +131,16 @@ def parse_standings(html: str) -> list[StandingRow]:
     return rows
 
 
+# Ueberschriften, die keine Liga benennen, sondern nur die Ansicht.
+_GENERIC_HEADINGS = {"team-spielplan", "spielplan", "match center", "resultate", "info"}
+
+
 def parse_league_title(html: str) -> str:
-    """Der Liganame steht in der Panel-Ueberschrift ueber der Tabelle."""
+    """Der Liganame steht in der Panel-Ueberschrift ueber der Tabelle.
+
+    Hat ein Team gar keinen Spielbetrieb, steht dort nur "Team-Spielplan" -
+    das ist kein Liganame und wird deshalb verworfen.
+    """
     soup = _soup(html)
     table = soup.select_one("table.nisRanglisteRD")
     if table is not None:
@@ -141,7 +149,9 @@ def parse_league_title(html: str) -> str:
             heading = panel.select_one(".panel-heading h4") or panel.select_one(".panel-heading")
             if heading is not None and _text(heading):
                 return _text(heading)
-    return _text(soup.select_one("h4"))
+
+    title = _text(soup.select_one("h4"))
+    return "" if title.lower() in _GENERIC_HEADINGS else title
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +260,80 @@ def parse_matches(html: str) -> list[MatchRow]:
             )
         )
     return matches
+
+
+# ---------------------------------------------------------------------------
+# Turniere (Junioren E, F, G)
+# ---------------------------------------------------------------------------
+#
+# Im Schweizer Kinderfussball wird bewusst ohne Resultate und Rangliste
+# gespielt ("play more football"). Statt Paarungen stehen dort Turniere:
+# ein Termin, ein Platz, ein Organisator und eine Liste teilnehmender Teams.
+
+
+@dataclass
+class Tournament:
+    tournament_id: str
+    date: str | None
+    time: str = ""
+    title: str = ""
+    category: str = ""
+    series: str = ""
+    organiser: str = ""
+    venue: str = ""
+    teams: list[str] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.teams is None:
+            self.teams = []
+
+
+def parse_tournaments(html: str) -> list[Tournament]:
+    soup = _soup(html)
+    tournaments: list[Tournament] = []
+
+    for header in soup.select(".list-group-item.sppTitel"):
+        cells = header.select(".row.spiel > div")
+        if len(cells) < 2:
+            continue  # normale Spieltag-Ueberschrift, kein Turnierkopf
+        when, title = _text(cells[0]), _text(cells[1])
+        if "turnier" not in title.lower():
+            continue
+
+        body = header.find_next_sibling("div", class_="list-group-item")
+        lines = [_text(d) for d in body.select(".font-small > div")] if body else []
+
+        t = Tournament(
+            tournament_id="",
+            date=_iso_date(when),
+            time=(re.search(r"(\d{1,2}:\d{2})", when) or [None, ""])[1]
+            if re.search(r"(\d{1,2}:\d{2})", when) else "",
+            title=title,
+        )
+        for line in lines:
+            low = line.lower()
+            if low.startswith("turniernummer"):
+                t.tournament_id = line.split(":", 1)[-1].strip()
+            elif low.startswith("organisator"):
+                t.organiser = line.split(":", 1)[-1].strip()
+            elif low.startswith("teams:"):
+                t.teams = [x.strip() for x in line.split(":", 1)[-1].split(",") if x.strip()]
+            elif low.startswith("turnier "):
+                t.series = line
+            elif _DATE_RE.search(line):
+                # "15.08.2026 10:00 - 12:00" - genauere Zeitangabe als der Kopf
+                span = re.search(r"(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})", line)
+                if span:
+                    t.time = f"{span.group(1)}–{span.group(2)}"
+            elif not t.category:
+                t.category = line
+            elif not t.venue:
+                t.venue = line
+
+        if t.tournament_id:
+            tournaments.append(t)
+
+    return tournaments
 
 
 # ---------------------------------------------------------------------------

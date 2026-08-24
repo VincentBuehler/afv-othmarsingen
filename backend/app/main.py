@@ -9,6 +9,7 @@ Start:  uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import date, timedelta
 from typing import Any
@@ -60,7 +61,7 @@ SOURCE_NOTE = {
 def health(conn: sqlite3.Connection = Depends(get_conn)) -> dict:
     counts = {
         t: conn.execute(f"SELECT COUNT(*) c FROM {t}").fetchone()["c"]
-        for t in ("teams", "matches", "standings", "scorers", "match_events")
+        for t in ("teams", "matches", "standings", "scorers", "match_events", "tournaments")
     }
     return {
         "status": "ok",
@@ -134,7 +135,45 @@ def team_detail(team_id: int, conn: sqlite3.Connection = Depends(get_conn)) -> d
         "next_match": upcoming[0] if upcoming else None,
         "last_match": played[-1] if played else None,
         "match_count": {"played": len(played), "upcoming": len(upcoming)},
+        "tournaments": _tournaments(
+            conn,
+            "SELECT t.*, tm.name AS team_name FROM tournaments t "
+            "LEFT JOIN teams tm ON tm.team_id = t.team_id "
+            "WHERE t.team_id = ? ORDER BY t.date",
+            (team_id,),
+        ),
     }
+
+
+def _tournaments(conn: sqlite3.Connection, sql: str, params: tuple) -> list[dict]:
+    """Turniere laden und das JSON-Feld "teams" wieder zur Liste machen."""
+    rows = db.rows(conn, sql, params)
+    for r in rows:
+        try:
+            r["teams"] = json.loads(r["teams"])
+        except (json.JSONDecodeError, TypeError):
+            r["teams"] = []
+    return rows
+
+
+@app.get("/api/tournaments/upcoming", tags=["Spiele"])
+def upcoming_tournaments(
+    days: int = Query(30, ge=1, le=180),
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> list[dict]:
+    """Kommende Turniere im Kinderfussball (Junioren E/F/G)."""
+    today = date.today().isoformat()
+    until = (date.today() + timedelta(days=days)).isoformat()
+    return _tournaments(
+        conn,
+        """
+        SELECT t.*, tm.name AS team_name FROM tournaments t
+        LEFT JOIN teams tm ON tm.team_id = t.team_id
+        WHERE t.date BETWEEN ? AND ?
+        ORDER BY t.date, t.time
+        """,
+        (today, until),
+    )
 
 
 @app.get("/api/teams/{team_id}/matches", tags=["Teams"])

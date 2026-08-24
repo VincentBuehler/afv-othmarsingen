@@ -99,6 +99,23 @@ CREATE TABLE IF NOT EXISTS match_events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_kind ON match_events (kind);
 
+-- Junioren E/F/G spielen Turniere statt Meisterschaft: kein Resultat, keine
+-- Rangliste, nur Termin, Platz und Teilnehmerfeld ("play more football").
+CREATE TABLE IF NOT EXISTS tournaments (
+    tournament_id TEXT    NOT NULL,
+    team_id       INTEGER NOT NULL,
+    date          TEXT,
+    time          TEXT NOT NULL DEFAULT '',
+    title         TEXT NOT NULL DEFAULT '',
+    category      TEXT NOT NULL DEFAULT '',
+    series        TEXT NOT NULL DEFAULT '',
+    organiser     TEXT NOT NULL DEFAULT '',
+    venue         TEXT NOT NULL DEFAULT '',
+    teams         TEXT NOT NULL DEFAULT '[]',   -- JSON-Array
+    PRIMARY KEY (tournament_id, team_id)
+);
+CREATE INDEX IF NOT EXISTS idx_tournaments_date ON tournaments (date);
+
 -- Offizielle Torschuetzenliste des Verbands, pro Gruppe.
 CREATE TABLE IF NOT EXISTS scorers (
     group_id INTEGER NOT NULL,
