@@ -17,3 +17,4 @@ dist/
 *.log
 .DS_Store
 .env
+ANFRAGE-AFV.md
