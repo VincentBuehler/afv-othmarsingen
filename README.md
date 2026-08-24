@@ -116,6 +116,16 @@ QR-Code mit der Kamera scannen, [Expo Go](https://expo.dev/go) öffnet die App a
 dem iPhone. Die Backend-Adresse leitet die App automatisch aus dem Expo-Dev-Server
 ab — im gleichen WLAN muss nichts konfiguriert werden.
 
+**SDK-Version:** Das Projekt liegt bewusst auf **Expo SDK 54**, weil Expo Go immer nur
+genau eine SDK-Version unterstützt und auf älteren iPhones keine neuere Expo-Go-App
+installierbar ist. Wer eine aktuellere Expo-Go-Version hat, kann mit
+`npx expo install expo@^57.0.0` und `npx expo install --fix` hochziehen.
+
+**Firewall unter Windows:** iPhone und Laptop müssen im selben WLAN sein, und die Ports
+8081 (Metro) und 8000 (Backend) müssen eingehend erlaubt sein. Wurde die Windows-Abfrage
+einmal mit „Abbrechen" beantwortet, legt Windows eine dauerhafte *Block*-Regel an, die
+man von Hand entfernen muss.
+
 ### Ohne Netz entwickeln
 
 ```bash
@@ -165,7 +175,7 @@ Mal nach.
 ## Stack
 
 Python 3.11 · FastAPI · SQLite · BeautifulSoup + lxml ·
-React Native (Expo SDK 57) · TypeScript · React Navigation
+React Native (Expo SDK 54) · TypeScript · React Navigation
 
 ## Datenquelle
 
