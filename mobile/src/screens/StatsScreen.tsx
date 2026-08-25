@@ -14,12 +14,12 @@ import { colors, radius, spacing } from '../theme';
 import { useApi } from '../useApi';
 
 export default function StatsScreen() {
-  const overview = useApi<Overview>('/api/stats/overview');
+  const overview = useApi<Overview>('/stats/overview');
   const [teamId, setTeamId] = useState<number | null>(null);
 
   // Standardmaessig die erste Mannschaft, sobald die Teamliste da ist.
   const selected = teamId ?? overview.data?.teams[0]?.team_id ?? null;
-  const stats = useApi<TeamStats>(selected ? `/api/teams/${selected}/stats` : null);
+  const stats = useApi<TeamStats>(selected ? `/teams/${selected}/stats` : null);
 
   if (overview.loading) return <Loading />;
   if (overview.error) return <ErrorBox error={overview.error} onRetry={overview.reload} />;

@@ -34,10 +34,14 @@ nicht** — die rechnet dieses Projekt aus den gespiegelten Spieldaten.
 └──────────────────┘                      └──────────┬───────────┘
                                                      │ schreibt
                                           ┌──────────▼───────────┐
-┌──────────────────┐    JSON, lokal       │  SQLite              │
-│  App (Expo/RN)   │◄─────────────────────│  + FastAPI           │
-│  iPhone/Android  │                      │                      │
-└──────────────────┘                      └──────────────────────┘
+                                          │  SQLite   + FastAPI  │
+                                          └──────────┬───────────┘
+                                        export_static │
+                                          ┌──────────▼───────────┐
+┌──────────────────┐   statisches JSON    │  docs/api/*.json     │
+│  App (Expo/RN)   │◄─────────────────────│  auf GitHub Pages    │
+│  iPhone/Android  │                      └──────────────────────┘
+└──────────────────┘
 ```
 
 Die App spricht **nie** direkt mit dem AFV. Der Sync läuft als eigener Prozess und
@@ -132,6 +136,66 @@ man von Hand entfernen muss.
 python -m tools.seed_cache seiten   # gespeicherte Seiten in den Cache
 python -m app.sync --offline        # Pipeline ohne einen einzigen Request
 ```
+
+---
+
+## Veröffentlichen
+
+Die App soll ohne laufenden Laptop funktionieren. Beide Hälften gehen dafür getrennte Wege.
+
+### Daten → GitHub Pages
+
+Ein Server wäre hier Verschwendung: Die Daten ändern sich ein paar Mal pro Woche, und
+jeder Aufruf der App ist ein reines GET ohne Parameter. Also friert der Export den Stand
+als statische Dateien ein.
+
+```bash
+cd backend
+python -m app.sync --details 40      # frische Daten holen
+python -m tools.export_static        # nach docs/api/*.json schreiben
+cd .. && git add docs && git commit -m "Daten aktualisiert" && git push
+```
+
+Ergebnis: rund 150 Dateien, ~200 KB, ausgeliefert unter
+`https://<user>.github.io/afv-othmarsingen/api/`. Kostenlos, ohne Kaltstart, kann nicht
+ausfallen.
+
+**Warum kein Render oder Fly.io?** Auf deren Gratis-Stufen ist die Festplatte flüchtig —
+die SQLite-Datenbank wäre nach jedem Neustart weg. Und der Scraper liefe aus einem
+Rechenzentrum, wo Cloudflare zuverlässig blockt; von einem Wohnanschluss aus geht er durch.
+Der Sync gehört deshalb auf den eigenen Rechner.
+
+### App-Code → EAS Update
+
+```bash
+npm install --global eas-cli
+cd mobile
+eas login                            # kostenloser Expo-Account
+eas update:configure
+eas update --branch production --message "Erste Version" --environment production
+```
+
+Danach erscheint das Projekt in Expo Go unter *Projects* und lässt sich ohne laufenden
+Dev-Server öffnen. Zwei Bedingungen:
+
+* In Expo Go muss **derselbe Account** eingeloggt sein, dem das Projekt gehört — seit
+  Mai 2026 lädt Expo Go nur noch eigene Projekte.
+* In `app.json` darf **kein `runtimeVersion`** stehen. Setzt `eas update:configure` eines,
+  muss es wieder raus, sonst verweigert Expo Go das Laden.
+
+Die Adresse der Daten-API kommt aus `eas.json` (`updates.production.env`) und landet beim
+Build im Bundle. Beim lokalen Entwickeln ist sie nicht gesetzt, dann sucht sich die App
+das FastAPI-Backend im WLAN — siehe `mobile/src/api.ts`.
+
+### Alternative: als Web-App
+
+```bash
+cd mobile && npx expo export --platform web --output-dir ../docs/app
+```
+
+Dann liegt die App neben den Daten auf GitHub Pages, lässt sich per Link teilen und über
+Safaris «Zum Home-Bildschirm» wie eine App installieren — ohne Expo Go und ohne
+Apple-Developer-Account.
 
 ---
 

@@ -17,7 +17,7 @@ const KIND_LABEL: Record<string, string> = {
 
 export default function MatchScreen({ route }: { route: any }) {
   const { matchId } = route.params;
-  const { data, loading, error, reload } = useApi<MatchDetail>(`/api/matches/${matchId}`);
+  const { data, loading, error, reload } = useApi<MatchDetail>(`/matches/${matchId}`);
 
   if (loading) return <Loading />;
   if (error) return <ErrorBox error={error} onRetry={reload} />;

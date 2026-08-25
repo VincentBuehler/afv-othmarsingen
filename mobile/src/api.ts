@@ -1,21 +1,38 @@
 /**
- * Zugriff auf das eigene Backend.
+ * Zugriff auf die Daten. Zwei Betriebsarten, gleiche Aufrufe.
  *
- * Die App spricht nie direkt mit dem Matchcenter des AFV - nur mit dem
- * FastAPI-Backend, das die Daten gespiegelt hat.
+ * Die App spricht nie direkt mit dem Matchcenter des AFV.
  *
- * Die Adresse wird zur Laufzeit aus dem Expo-Dev-Server abgeleitet: laeuft die
- * App per Expo Go auf dem iPhone, kennt Expo bereits die IP des Laptops im
- * WLAN. Damit muss beim Wechsel des Netzwerks nichts von Hand angepasst werden.
- * Ueber app.json -> extra.apiUrl laesst sich eine feste Adresse erzwingen.
+ * 1. Entwicklung: das lokale FastAPI-Backend. Die Adresse wird aus dem
+ *    Expo-Dev-Server abgeleitet - laeuft die App per Expo Go auf dem iPhone,
+ *    kennt Expo bereits die IP des Laptops im WLAN. Beim Netzwechsel muss
+ *    also nichts angepasst werden.
+ *
+ * 2. Veroeffentlicht: statische JSON-Dateien auf GitHub Pages, erzeugt von
+ *    `python -m tools.export_static`. Kein Server, keine Kaltstarts, gratis.
+ *    Dann haengt jeder Pfad ein ".json" an und die Query entfaellt - deshalb
+ *    fragt die App immer die volle Liste ab und filtert selbst (siehe
+ *    `withinDays`). So verhalten sich beide Modi identisch.
+ *
+ * Gesteuert ueber Umgebungsvariablen beim Build:
+ *    EXPO_PUBLIC_API_URL=https://<user>.github.io/afv-othmarsingen/api
+ *    EXPO_PUBLIC_API_MODE=static
  */
 import Constants from 'expo-constants';
 
 const PORT = 8000;
 
+const CONFIGURED_URL =
+  process.env.EXPO_PUBLIC_API_URL ??
+  (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl;
+
+/** Statischer Modus: Pfade bekommen ".json", Query-Parameter entfallen. */
+export const IS_STATIC =
+  (process.env.EXPO_PUBLIC_API_MODE ??
+    (Constants.expoConfig?.extra as { apiMode?: string } | undefined)?.apiMode) === 'static';
+
 function resolveBaseUrl(): string {
-  const configured = (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl;
-  if (configured) return configured.replace(/\/$/, '');
+  if (CONFIGURED_URL) return CONFIGURED_URL.replace(/\/$/, '');
 
   // hostUri sieht aus wie "192.168.1.42:8081"
   const hostUri =
@@ -23,13 +40,20 @@ function resolveBaseUrl(): string {
     (Constants.expoGoConfig as { debuggerHost?: string } | undefined)?.debuggerHost;
 
   const host = hostUri?.split(':')[0];
-  if (host) return `http://${host}:${PORT}`;
+  if (host) return `http://${host}:${PORT}/api`;
 
   // Letzter Ausweg (Simulator auf dem gleichen Rechner)
-  return `http://localhost:${PORT}`;
+  return `http://localhost:${PORT}/api`;
 }
 
 export const API_BASE = resolveBaseUrl();
+
+/** "/matches/upcoming?days=400" -> ".../matches/upcoming.json" im statischen Modus. */
+function buildUrl(path: string): string {
+  if (!IS_STATIC) return `${API_BASE}${path}`;
+  const [bare] = path.split('?');
+  return `${API_BASE}${bare}.json`;
+}
 
 export class ApiError extends Error {
   constructor(message: string, readonly status?: number) {
@@ -38,18 +62,42 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const url = buildUrl(path);
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}${path}`, { signal });
+    response = await fetch(url, { signal });
   } catch {
     throw new ApiError(
-      `Backend nicht erreichbar (${API_BASE}). Laeuft "uvicorn app.main:app --host 0.0.0.0"?`,
+      IS_STATIC
+        ? `Daten nicht erreichbar (${API_BASE}). Besteht eine Internetverbindung?`
+        : `Backend nicht erreichbar (${API_BASE}). Läuft "uvicorn app.main:app --host 0.0.0.0"?`,
     );
   }
   if (!response.ok) {
     throw new ApiError(`Server antwortet mit ${response.status}`, response.status);
   }
   return (await response.json()) as T;
+}
+
+// ---------------------------------------------------------------------------
+// Filter, die im statischen Modus die Query-Parameter ersetzen
+// ---------------------------------------------------------------------------
+
+/** Behaelt Eintraege, deren Datum hoechstens `days` Tage in der Zukunft liegt. */
+export function withinDays<T extends { kickoff_date?: string | null; date?: string | null }>(
+  items: T[] | null,
+  days: number,
+): T[] {
+  if (!items) return [];
+  const limit = new Date();
+  limit.setHours(23, 59, 59, 999);
+  limit.setDate(limit.getDate() + days);
+  const cutoff = limit.toISOString().slice(0, 10);
+
+  return items.filter((item) => {
+    const d = item.kickoff_date ?? item.date;
+    return !d || d <= cutoff;
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -13,8 +13,8 @@ type Tab = 'tabelle' | 'turniere' | 'spiele' | 'bilanz';
 
 export default function TeamScreen({ route, navigation }: { route: any; navigation: any }) {
   const { teamId } = route.params;
-  const detail = useApi<TeamDetail>(`/api/teams/${teamId}`);
-  const matches = useApi<Match[]>(`/api/teams/${teamId}/matches`);
+  const detail = useApi<TeamDetail>(`/teams/${teamId}`);
+  const matches = useApi<Match[]>(`/teams/${teamId}/matches`);
   const [tab, setTab] = useState<Tab | null>(null);
 
   if (detail.loading) return <Loading />;

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Match } from '../api';
+import { Match, withinDays } from '../api';
 import { Card, Empty, ErrorBox, Loading, MatchRow } from '../components';
 import { colors, radius, spacing } from '../theme';
 import { useApi } from '../useApi';
@@ -10,12 +10,15 @@ import { useApi } from '../useApi';
 export default function MatchesScreen({ navigation }: { navigation: any }) {
   const [mode, setMode] = useState<'kommend' | 'resultate'>('kommend');
   const path =
-    mode === 'kommend' ? '/api/matches/upcoming?days=60' : '/api/matches/recent?limit=50';
+    mode === 'kommend' ? '/matches/upcoming?days=400' : '/matches/recent?limit=60';
   const { data, loading, refreshing, error, reload, refresh } = useApi<Match[]>(path);
+
+  // Volle Liste holen, lokal zuschneiden - siehe Kommentar in api.ts.
+  const visible = mode === 'kommend' ? withinDays(data, 60) : (data ?? []).slice(0, 50);
 
   // Spiele nach Datum gruppieren, damit man die Wochenenden erkennt.
   const groups = new Map<string, Match[]>();
-  for (const m of data ?? []) {
+  for (const m of visible) {
     const key = m.kickoff_date ?? 'ohne Datum';
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(m);

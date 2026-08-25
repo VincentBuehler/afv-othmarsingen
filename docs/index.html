@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>FC Othmarsingen – Daten-API</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 44rem; margin: 3rem auto; padding: 0 1.5rem;
+         line-height: 1.6; color: #14201a; }
+  code { background: #f0f3f1; padding: .15em .4em; border-radius: 4px; font-size: .9em; }
+  a { color: #1b8a4b; }
+  .hint { color: #63736b; font-size: .9rem; }
+</style>
+<h1>FC Othmarsingen – Daten-API</h1>
+<p>Statischer Datenstand für die inoffizielle FC-Othmarsingen-App. Die Dateien werden von
+<code>python -m tools.export_static</code> erzeugt und hier unverändert ausgeliefert – kein Server,
+keine Datenbank im Betrieb.</p>
+<p>Einstiegspunkte:
+  <a href="api/meta.json">meta.json</a> ·
+  <a href="api/club.json">club.json</a> ·
+  <a href="api/stats/overview.json">stats/overview.json</a> ·
+  <a href="api/matches/upcoming.json">matches/upcoming.json</a>
+</p>
+<p class="hint">Datenquelle: Matchcenter des Aargauer Fussballverbands (matchcenter.afv.ch).
+Inoffizielles Projekt, keine Gewähr für Richtigkeit. Quellcode:
+<a href="https://github.com/VincentBuehler/afv-othmarsingen">github.com/VincentBuehler/afv-othmarsingen</a></p>

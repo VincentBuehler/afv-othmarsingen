@@ -158,7 +158,7 @@ def _tournaments(conn: sqlite3.Connection, sql: str, params: tuple) -> list[dict
 
 @app.get("/api/tournaments/upcoming", tags=["Spiele"])
 def upcoming_tournaments(
-    days: int = Query(30, ge=1, le=180),
+    days: int = Query(30, ge=1, le=400),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> list[dict]:
     """Kommende Turniere im Kinderfussball (Junioren E/F/G)."""
@@ -226,7 +226,7 @@ def team_stats(team_id: int, conn: sqlite3.Connection = Depends(get_conn)) -> di
 
 @app.get("/api/matches/upcoming", tags=["Spiele"])
 def upcoming(
-    days: int = Query(14, ge=1, le=120),
+    days: int = Query(14, ge=1, le=400),
     club_only: bool = Query(True, description="nur Spiele des eigenen Vereins"),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> list[dict]:

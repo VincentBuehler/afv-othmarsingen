@@ -7,7 +7,7 @@
 import React from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
 
-import { Match, Overview, Tournament } from '../api';
+import { Match, Overview, Tournament, withinDays } from '../api';
 import {
   Card, Empty, ErrorBox, FormDots, Loading, MatchRow, SectionTitle, Stat, TournamentRow,
 } from '../components';
@@ -15,10 +15,12 @@ import { colors, radius, spacing } from '../theme';
 import { useApi } from '../useApi';
 
 export default function HomeScreen({ navigation }: { navigation: any }) {
-  const overview = useApi<Overview>('/api/stats/overview');
-  const upcoming = useApi<Match[]>('/api/matches/upcoming?days=14');
-  const recent = useApi<Match[]>('/api/matches/recent?limit=6');
-  const tournaments = useApi<Tournament[]>('/api/tournaments/upcoming?days=21');
+  const overview = useApi<Overview>('/stats/overview');
+  // Immer die volle Liste holen und lokal zuschneiden: im statischen Modus
+  // gibt es keine Query-Parameter, so verhalten sich beide Modi gleich.
+  const upcoming = useApi<Match[]>('/matches/upcoming?days=400');
+  const recent = useApi<Match[]>('/matches/recent?limit=60');
+  const tournaments = useApi<Tournament[]>('/tournaments/upcoming?days=400');
 
   const refreshAll = () => {
     overview.refresh();
@@ -31,6 +33,9 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   if (overview.error) return <ErrorBox error={overview.error} onRetry={overview.reload} />;
 
   const data = overview.data!;
+  const nextMatches = withinDays(upcoming.data, 14);
+  const lastResults = (recent.data ?? []).slice(0, 6);
+  const nextTournaments = withinDays(tournaments.data, 21);
   const openMatch = (m: Match) => navigation.navigate('Spiel', { matchId: m.match_id });
 
   return (
@@ -54,8 +59,8 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
       <Card>
         {upcoming.loading ? (
           <Loading label="…" />
-        ) : upcoming.data?.length ? (
-          upcoming.data.map((m) => <MatchRow key={m.match_id} match={m} onPress={() => openMatch(m)} />)
+        ) : nextMatches.length ? (
+          nextMatches.map((m) => <MatchRow key={m.match_id} match={m} onPress={() => openMatch(m)} />)
         ) : (
           <Empty>In den nächsten 14 Tagen ist kein Spiel angesetzt.</Empty>
         )}
@@ -65,18 +70,18 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
       <Card>
         {recent.loading ? (
           <Loading label="…" />
-        ) : recent.data?.length ? (
-          recent.data.map((m) => <MatchRow key={m.match_id} match={m} onPress={() => openMatch(m)} />)
+        ) : lastResults.length ? (
+          lastResults.map((m) => <MatchRow key={m.match_id} match={m} onPress={() => openMatch(m)} />)
         ) : (
           <Empty>Noch keine Resultate erfasst.</Empty>
         )}
       </Card>
 
-      {tournaments.data?.length ? (
+      {nextTournaments.length ? (
         <>
           <SectionTitle hint="Junioren E/F/G">Kommende Turniere</SectionTitle>
           <Card>
-            {tournaments.data.map((t) => (
+            {nextTournaments.map((t) => (
               <TournamentRow key={`${t.tournament_id}-${t.team_id}`} tournament={t} />
             ))}
           </Card>
