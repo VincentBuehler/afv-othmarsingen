@@ -78,9 +78,9 @@ gleichem Namen in der Statistik nicht zusammengezählt.
 
 Das war der aufwendigste Teil des Projekts und ist bewusst so gelöst:
 
-* **6 Sekunden Pause** zwischen zwei Requests, fest eingebaut.
+* **15 Sekunden Pause** zwischen zwei Requests, fest eingebaut.
 * **Disk-Cache** mit TTL: abgeschlossene Spiele werden 7 Tage nicht neu geladen.
-* **Ein voller Sync sind ~45 Requests** für den ganzen Verein — einmal täglich reicht.
+* **Ein voller Sync sind ~45 Requests** für den ganzen Verein, also gut 12 Minuten — einmal täglich reicht.
 * **Ehrlicher User-Agent** mit Projektname und Kontaktadresse.
 * `robots.txt` des Matchcenters erlaubt `User-agent: * → Allow: /`.
 
@@ -230,7 +230,7 @@ Alles über Umgebungsvariablen, kein Code-Eingriff nötig:
 | `AFV_CLUB_MATCH_NAME` | `Othmarsingen` | Wie der Verein in Paarungen steht |
 | `AFV_ORG_ID` | `5` | Verband (5 = AFV) |
 | `AFV_SEASON` | `2027` | Saison 2026/27 |
-| `AFV_REQUEST_DELAY` | `6.0` | Sekunden zwischen zwei Requests |
+| `AFV_REQUEST_DELAY` | `15.0` | Sekunden zwischen zwei Requests |
 | `AFV_HTTP_BACKEND` | `auto` | `curl`, `httpx` oder `auto` |
 
 Für einen anderen Verein reicht also `AFV_CLUB_ID` und `AFV_CLUB_NAME`.

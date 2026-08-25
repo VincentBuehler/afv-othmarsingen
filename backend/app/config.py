@@ -36,7 +36,11 @@ USER_AGENT = os.getenv(
 )
 # Mindestabstand zwischen zwei Requests in Sekunden. Bewusst defensiv:
 # das Matchcenter ist ein kleiner Verbandsserver, kein CDN.
-REQUEST_DELAY = float(os.getenv("AFV_REQUEST_DELAY", "6.0"))
+#
+# Bei 6s drosselt Cloudflare nach laengerer Nutzung fast jeden Request mit 403.
+# 15s laeuft stabil durch. Ein voller Sync dauert damit rund 12 Minuten - das
+# ist fuer einen naechtlichen Lauf voellig egal und schont die Gegenseite.
+REQUEST_DELAY = float(os.getenv("AFV_REQUEST_DELAY", "15.0"))
 REQUEST_TIMEOUT = float(os.getenv("AFV_REQUEST_TIMEOUT", "20"))
 
 # --- Cache & Datenbank -----------------------------------------------------
