@@ -183,14 +183,18 @@ Dev-Server öffnen. Zwei Bedingungen:
 * In `app.json` darf **kein `runtimeVersion`** stehen. Setzt `eas update:configure` eines,
   muss es wieder raus, sonst verweigert Expo Go das Laden.
 
-Die Adresse der Daten-API kommt aus `eas.json` (`updates.production.env`) und landet beim
-Build im Bundle. Beim lokalen Entwickeln ist sie nicht gesetzt, dann sucht sich die App
-das FastAPI-Backend im WLAN — siehe `mobile/src/api.ts`.
+Es braucht **keine Konfiguration**: `mobile/src/api.ts` entscheidet über `__DEV__`.
+Ein Entwicklungs-Bundle sucht das FastAPI-Backend im WLAN, ein veröffentlichtes Bundle
+nimmt die statischen Daten auf GitHub Pages. `eas update` läuft damit ohne weitere
+Einstellungen.
 
-> **Fallstrick:** Metro backt `EXPO_PUBLIC_*`-Variablen fest ins Bundle **und cacht das
-> Ergebnis**. Wechselt man zwischen den Modi, zeigt der nächste Build sonst noch auf die
-> alte Adresse. Dann `--clear` mitgeben:
-> `npx expo export --platform web --output-dir dist --clear`
+Zum Überschreiben (etwa um lokal gegen die veröffentlichten Daten zu testen) gibt es
+`EXPO_PUBLIC_API_URL` und `EXPO_PUBLIC_API_MODE`.
+
+> **Fallstrick dabei:** Metro backt `EXPO_PUBLIC_*`-Variablen fest ins Bundle **und cacht
+> das Ergebnis**. Wechselt man die Werte, zeigt der nächste Build sonst noch auf die alte
+> Adresse — dann `--clear` mitgeben. Genau deshalb hängt der Normalfall an `__DEV__`
+> statt an Umgebungsvariablen.
 
 ### Alternative: als Web-App
 

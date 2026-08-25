@@ -14,27 +14,44 @@
  *    fragt die App immer die volle Liste ab und filtert selbst (siehe
  *    `withinDays`). So verhalten sich beide Modi identisch.
  *
- * Gesteuert ueber Umgebungsvariablen beim Build:
- *    EXPO_PUBLIC_API_URL=https://<user>.github.io/afv-othmarsingen/api
+ * Welcher Modus gilt, entscheidet `__DEV__`: in einem Entwicklungs-Bundle das
+ * lokale Backend, in einem veroeffentlichten Bundle die statischen Daten.
+ * Damit braucht `eas update` keinerlei Konfiguration - und der Fallstrick
+ * entfaellt, dass Metro Umgebungsvariablen fest einbackt und cacht.
+ *
+ * Zum Ueberschreiben (etwa um lokal gegen die veroeffentlichten Daten zu
+ * testen) gibt es weiterhin:
+ *    EXPO_PUBLIC_API_URL=http://localhost:8083/api
  *    EXPO_PUBLIC_API_MODE=static
  */
 import Constants from 'expo-constants';
 
 const PORT = 8000;
 
+/** Die veroeffentlichten Daten - erzeugt von `python -m tools.export_static`. */
+const PUBLISHED_API = 'https://vincentbuehler.github.io/afv-othmarsingen/api';
+
 const CONFIGURED_URL =
   process.env.EXPO_PUBLIC_API_URL ??
   (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl;
 
+const CONFIGURED_MODE =
+  process.env.EXPO_PUBLIC_API_MODE ??
+  (Constants.expoConfig?.extra as { apiMode?: string } | undefined)?.apiMode;
+
 /** Statischer Modus: Pfade bekommen ".json", Query-Parameter entfallen. */
-export const IS_STATIC =
-  (process.env.EXPO_PUBLIC_API_MODE ??
-    (Constants.expoConfig?.extra as { apiMode?: string } | undefined)?.apiMode) === 'static';
+export const IS_STATIC = CONFIGURED_MODE
+  ? CONFIGURED_MODE === 'static'
+  : !CONFIGURED_URL && !__DEV__;
 
 function resolveBaseUrl(): string {
   if (CONFIGURED_URL) return CONFIGURED_URL.replace(/\/$/, '');
 
-  // hostUri sieht aus wie "192.168.1.42:8081"
+  // Veroeffentlichtes Bundle (eas update, Store-Build): feste Adresse, denn
+  // hier gibt es keinen Laptop im WLAN, den man fragen koennte.
+  if (!__DEV__) return PUBLISHED_API;
+
+  // Entwicklung: hostUri sieht aus wie "192.168.1.42:8081"
   const hostUri =
     Constants.expoConfig?.hostUri ??
     (Constants.expoGoConfig as { debuggerHost?: string } | undefined)?.debuggerHost;

@@ -17,13 +17,5 @@
   },
   "submit": {
     "production": {}
-  },
-  "updates": {
-    "production": {
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://vincentbuehler.github.io/afv-othmarsingen/api",
-        "EXPO_PUBLIC_API_MODE": "static"
-      }
-    }
   }
 }
