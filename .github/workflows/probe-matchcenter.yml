@@ -1,0 +1,31 @@
+# Einmaliger Test: Kommt ein GitHub-Runner ueberhaupt ans Matchcenter?
+#
+# Cloudflare blockt Python-HTTP-Clients am TLS-Fingerprint und drosselt nach
+# Tempo. Ob es zusaetzlich Rechenzentrums-IPs blockt, laesst sich nur
+# ausprobieren - davon haengt ab, ob der Sync in der Cloud laufen kann.
+name: Probe Matchcenter
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Drei Seiten abrufen
+        run: |
+          UA="FCOthmarsingenApp/1.0 (inoffizielle Vereins-App, Portfolio-Projekt)"
+          for path in "v=269" "s=2027&ln=13010" "tg=4322039"; do
+            code=$(curl -s -o /tmp/out.html -w "%{http_code}" \
+              -A "$UA" -H "Accept-Language: de-CH,de;q=0.9" \
+              "https://matchcenter.afv.ch/default.aspx?oid=5&lng=1&$path")
+            size=$(wc -c < /tmp/out.html)
+            echo "HTTP $code  ${size} Bytes  ?$path"
+            if [ "$code" = "200" ] && [ "$size" -gt 20000 ]; then
+              echo "  -> echte Seite"
+            else
+              echo "  -> blockiert oder Challenge:"
+              head -c 300 /tmp/out.html; echo
+            fi
+            sleep 8
+          done
