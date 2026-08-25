@@ -26,7 +26,13 @@
     },
     "updates": {
       "enabled": true,
-      "fallbackToCacheTimeout": 0
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/9294f341-8f9d-457b-991d-0ac9749f16ab"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "9294f341-8f9d-457b-991d-0ac9749f16ab"
+      }
     }
   }
 }
