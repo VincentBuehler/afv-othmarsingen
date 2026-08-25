@@ -187,6 +187,11 @@ Die Adresse der Daten-API kommt aus `eas.json` (`updates.production.env`) und la
 Build im Bundle. Beim lokalen Entwickeln ist sie nicht gesetzt, dann sucht sich die App
 das FastAPI-Backend im WLAN — siehe `mobile/src/api.ts`.
 
+> **Fallstrick:** Metro backt `EXPO_PUBLIC_*`-Variablen fest ins Bundle **und cacht das
+> Ergebnis**. Wechselt man zwischen den Modi, zeigt der nächste Build sonst noch auf die
+> alte Adresse. Dann `--clear` mitgeben:
+> `npx expo export --platform web --output-dir dist --clear`
+
 ### Alternative: als Web-App
 
 ```bash
