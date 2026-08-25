@@ -149,12 +149,22 @@ Ein Server wäre hier Verschwendung: Die Daten ändern sich ein paar Mal pro Woc
 jeder Aufruf der App ist ein reines GET ohne Parameter. Also friert der Export den Stand
 als statische Dateien ein.
 
+```powershell
+.\update-daten.ps1
+```
+
+Das Skript macht alle drei Schritte: Sync, Export, Push. Einzeln geht es auch:
+
 ```bash
 cd backend
 python -m app.sync --details 40      # frische Daten holen
 python -m tools.export_static        # nach docs/api/*.json schreiben
 cd .. && git add docs && git commit -m "Daten aktualisiert" && git push
 ```
+
+Die Daten in der App sind immer der Stand des letzten Laufs. Einmal täglich reicht:
+Resultate erscheinen im Matchcenter ohnehin erst Stunden nach Spielende. Unter Windows
+lässt sich das Skript per Aufgabenplanung automatisch ausführen.
 
 Ergebnis: rund 150 Dateien, ~200 KB, ausgeliefert unter
 `https://<user>.github.io/afv-othmarsingen/api/`. Kostenlos, ohne Kaltstart, kann nicht
