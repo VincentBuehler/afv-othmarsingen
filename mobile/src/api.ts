@@ -65,11 +65,33 @@ function resolveBaseUrl(): string {
 
 export const API_BASE = resolveBaseUrl();
 
+/**
+ * Notfall-Umschaltung auf die veroeffentlichten Daten.
+ *
+ * Beim Entwickeln ist das lokale Backend nicht immer erreichbar: in Schul- und
+ * Gast-WLANs duerfen Geraete oft gar nicht miteinander reden, und bei
+ * `expo start --tunnel` laeuft der Code zwar ueber Expo, das Backend im
+ * Heimnetz bleibt aber unerreichbar. Statt einer Fehlermeldung nimmt die App
+ * dann den veroeffentlichten Stand - der ist zwar aelter, aber die App laesst
+ * sich vorfuehren.
+ */
+let fallbackActive = false;
+
+/** Gilt gerade der statische Modus? (fest konfiguriert oder per Fallback) */
+function useStatic(): boolean {
+  return IS_STATIC || fallbackActive;
+}
+
+/** Aktuelle Basisadresse - nach dem Umschalten die veroeffentlichte. */
+export function activeBaseUrl(): string {
+  return fallbackActive ? PUBLISHED_API : API_BASE;
+}
+
 /** "/matches/upcoming?days=400" -> ".../matches/upcoming.json" im statischen Modus. */
-function buildUrl(path: string): string {
-  if (!IS_STATIC) return `${API_BASE}${path}`;
+function buildUrl(path: string, base: string, asStatic: boolean): string {
+  if (!asStatic) return `${base}${path}`;
   const [bare] = path.split('?');
-  return `${API_BASE}${bare}.json`;
+  return `${base}${bare}.json`;
 }
 
 export class ApiError extends Error {
@@ -78,22 +100,43 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const url = buildUrl(path);
-  let response: Response;
-  try {
-    response = await fetch(url, { signal });
-  } catch {
-    throw new ApiError(
-      IS_STATIC
-        ? `Daten nicht erreichbar (${API_BASE}). Besteht eine Internetverbindung?`
-        : `Backend nicht erreichbar (${API_BASE}). Läuft "uvicorn app.main:app --host 0.0.0.0"?`,
-    );
-  }
+async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new ApiError(`Server antwortet mit ${response.status}`, response.status);
   }
   return (await response.json()) as T;
+}
+
+export async function api<T>(path: string, signal?: AbortSignal): Promise<T> {
+  try {
+    return await fetchJson<T>(buildUrl(path, activeBaseUrl(), useStatic()), signal);
+  } catch (error) {
+    // Abgebrochene Anfragen (Screenwechsel) sind kein Verbindungsfehler.
+    if (signal?.aborted) throw error;
+
+    const alreadyPublished = useStatic() && activeBaseUrl() === PUBLISHED_API;
+    if (alreadyPublished || error instanceof ApiError) {
+      throw error instanceof ApiError
+        ? error
+        : new ApiError(
+            `Daten nicht erreichbar (${activeBaseUrl()}). Besteht eine Internetverbindung?`,
+          );
+    }
+
+    // Lokales Backend nicht erreichbar - einmal auf die veroeffentlichten
+    // Daten umschalten und den Aufruf wiederholen.
+    try {
+      const data = await fetchJson<T>(buildUrl(path, PUBLISHED_API, true), signal);
+      fallbackActive = true;
+      return data;
+    } catch {
+      throw new ApiError(
+        `Backend nicht erreichbar (${API_BASE}) und auch die veröffentlichten Daten ` +
+          `nicht. Läuft "uvicorn app.main:app --host 0.0.0.0" – oder fehlt Internet?`,
+      );
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

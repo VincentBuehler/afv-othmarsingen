@@ -198,6 +198,12 @@ Ein Entwicklungs-Bundle sucht das FastAPI-Backend im WLAN, ein veröffentlichtes
 nimmt die statischen Daten auf GitHub Pages. `eas update` läuft damit ohne weitere
 Einstellungen.
 
+Ist das lokale Backend nicht erreichbar, schaltet die App automatisch auf die
+veröffentlichten Daten um. Das ist kein Komfort-Detail: In Schul- und Gast-WLANs dürfen
+Geräte oft gar nicht miteinander reden, und bei `expo start --tunnel` läuft zwar der Code
+über Expo, das Backend im Heimnetz bleibt aber unerreichbar. Statt einer Fehlermeldung
+zeigt die App dann den letzten veröffentlichten Stand.
+
 Zum Überschreiben (etwa um lokal gegen die veröffentlichten Daten zu testen) gibt es
 `EXPO_PUBLIC_API_URL` und `EXPO_PUBLIC_API_MODE`.
 
