@@ -24,6 +24,10 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "experiments": {
+      "_comment": "Die Web-Version liegt auf GitHub Pages in einem Unterordner. Ohne baseUrl sucht sie ihr JS-Bundle im Wurzelverzeichnis und bleibt weiss. Gilt nur fuer 'expo export', nicht fuer den Dev-Server.",
+      "baseUrl": "/afv-othmarsingen/app"
+    },
     "updates": {
       "enabled": true,
       "fallbackToCacheTimeout": 0,
