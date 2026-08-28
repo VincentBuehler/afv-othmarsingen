@@ -1,23 +1,120 @@
 <!doctype html>
+<html lang="de">
+<head>
 <meta charset="utf-8">
-<title>FC Othmarsingen – Daten-API</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FC Othmarsingen – App</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 44rem; margin: 3rem auto; padding: 0 1.5rem;
-         line-height: 1.6; color: #14201a; }
-  code { background: #f0f3f1; padding: .15em .4em; border-radius: 4px; font-size: .9em; }
-  a { color: #1b8a4b; }
-  .hint { color: #63736b; font-size: .9rem; }
+  :root {
+    --bg: #f6f8f7;
+    --card: #ffffff;
+    --ink: #14201a;
+    --muted: #63736b;
+    --accent: #1b8a4b;
+    --dark: #123024;
+    --border: #e2e8e4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1613; --card: #172420; --ink: #e8f0ec; --muted: #9aaba2;
+      --accent: #35b06a; --dark: #0b1a13; --border: #263630;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 52rem; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+  header { background: var(--dark); color: #fff; padding: 2.5rem 1.5rem; text-align: center; }
+  header h1 { margin: 0 0 .3rem; font-size: 1.75rem; }
+  header p { margin: 0; opacity: .75; font-size: .95rem; }
+  .grid { display: grid; gap: 1.25rem; grid-template-columns: 1fr; margin-top: 2rem; }
+  @media (min-width: 40rem) { .grid { grid-template-columns: auto 1fr; align-items: center; } }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 1.5rem;
+  }
+  .qr { text-align: center; }
+  .qr svg { width: 190px; height: 190px; display: block; margin: 0 auto; }
+  .btn {
+    display: inline-block; background: var(--accent); color: #fff; text-decoration: none;
+    padding: .7rem 1.4rem; border-radius: 10px; font-weight: 600; margin-top: .5rem;
+  }
+  h2 { font-size: 1.05rem; margin: 2.5rem 0 .75rem; }
+  code {
+    background: var(--bg); border: 1px solid var(--border);
+    padding: .12em .4em; border-radius: 5px; font-size: .88em;
+  }
+  a { color: var(--accent); }
+  ul { padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+  .note { color: var(--muted); font-size: .87rem; }
+  footer {
+    margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: .85rem;
+  }
 </style>
-<h1>FC Othmarsingen – Daten-API</h1>
-<p>Statischer Datenstand für die inoffizielle FC-Othmarsingen-App. Die Dateien werden von
-<code>python -m tools.export_static</code> erzeugt und hier unverändert ausgeliefert – kein Server,
-keine Datenbank im Betrieb.</p>
-<p>Einstiegspunkte:
-  <a href="api/meta.json">meta.json</a> ·
-  <a href="api/club.json">club.json</a> ·
-  <a href="api/stats/overview.json">stats/overview.json</a> ·
-  <a href="api/matches/upcoming.json">matches/upcoming.json</a>
-</p>
-<p class="hint">Datenquelle: Matchcenter des Aargauer Fussballverbands (matchcenter.afv.ch).
-Inoffizielles Projekt, keine Gewähr für Richtigkeit. Quellcode:
-<a href="https://github.com/VincentBuehler/afv-othmarsingen">github.com/VincentBuehler/afv-othmarsingen</a></p>
+</head>
+<body>
+
+<header>
+  <h1>FC Othmarsingen</h1>
+  <p>Resultate, Tabellen und Statistiken aller Mannschaften</p>
+</header>
+
+<div class="wrap">
+
+  <div class="grid">
+    <div class="card qr">
+      <object data="qr.svg" type="image/svg+xml" width="190" height="190" aria-label="QR-Code zur App"></object>
+      <p class="note" style="margin:.75rem 0 0">Mit der Handy-Kamera scannen</p>
+    </div>
+    <div class="card">
+      <strong>App öffnen</strong>
+      <p class="note" style="margin:.4rem 0 .8rem">
+        Läuft direkt im Browser – keine Installation, kein Konto. Auf dem iPhone über
+        «Teilen → Zum Home-Bildschirm» wie eine App ablegbar.
+      </p>
+      <a class="btn" href="app/">Zur App</a>
+    </div>
+  </div>
+
+  <h2>Was das ist</h2>
+  <p>
+    Eine inoffizielle App rund um den FC Othmarsingen. Sie zeigt für alle 14 Mannschaften
+    des Vereins Spielplan, Resultate, Tabellenstand und Statistiken – darunter Auswertungen,
+    die das Matchcenter selbst nicht anbietet: in welcher Spielminute Tore fallen,
+    Heim- gegenüber Auswärtsbilanz, Formkurve.
+  </p>
+
+  <h2>Wie es funktioniert</h2>
+  <ul>
+    <li>Ein Programm liest einmal täglich die öffentlichen Seiten des Matchcenters aus.</li>
+    <li>Die Daten landen in einer Datenbank, die Statistiken daraus berechnet.</li>
+    <li>Der Stand wird als statische Dateien hier abgelegt – die App liest nur diese.</li>
+  </ul>
+  <p class="note">
+    Dadurch entstehen beim Verband rund 45 Seitenaufrufe pro Tag, unabhängig davon,
+    wie viele Leute die App benutzen.
+  </p>
+
+  <h2>Daten direkt</h2>
+  <p>
+    <a href="api/meta.json">meta.json</a> ·
+    <a href="api/club.json">club.json</a> ·
+    <a href="api/stats/overview.json">stats/overview.json</a> ·
+    <a href="api/matches/upcoming.json">matches/upcoming.json</a>
+  </p>
+
+  <footer>
+    Datenquelle: Matchcenter des Aargauer Fussballverbands (<code>matchcenter.afv.ch</code>).
+    Inoffizielles Projekt ohne Verbindung zum AFV oder zum FC Othmarsingen,
+    keine Gewähr für die Richtigkeit der Daten.<br>
+    Quellcode: <a href="https://github.com/VincentBuehler/afv-othmarsingen">github.com/VincentBuehler/afv-othmarsingen</a>
+  </footer>
+
+</div>
+</body>
+</html>
